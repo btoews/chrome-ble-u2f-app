@@ -5,7 +5,6 @@
 
 function BleCharacteristic(obj) {
   this.characteristic_ = obj;
-  this.value_ = obj.value;
   this.validateProperties_();
 }
 
@@ -22,18 +21,39 @@ BleCharacteristic.Properties = {
   notify: "notify"
 };
 
+BleCharacteristic.prototype.writeValue = function(value) {
+  var self = this;
+
+  return new Promise(function(resolve, reject) {
+    chrome.bluetoothLowEnergy.writeCharacteristicValue(self.characteristic_.instanceId, value, function() {
+      resolve();
+    });
+  });
+};
+
 BleCharacteristic.prototype.readValue = function() {
   var self = this;
 
   return new Promise(function(resolve, reject) {
-    if (self.value_)
-      return resolve(self.value_)
-
     chrome.bluetoothLowEnergy.readCharacteristicValue(self.characteristic_.instanceId, function(ret) {
-      console.log("char read", ret);
+      resolve(ret.value);
     })
   });
-}
+};
+
+BleCharacteristic.prototype.readUint8 = function() {
+  return this.readValue().then(function(arrayBuf) {
+    var view = new DataView(arrayBuf);
+    return view.getUint8(0);
+  });
+};
+
+BleCharacteristic.prototype.readUint16 = function() {
+  return this.readValue().then(function(arrayBuf) {
+    var view = new DataView(arrayBuf);
+    return view.getUint16(0, false);
+  });
+};
 
 BleCharacteristic.prototype.hasProperty_ = function(property) {
   return this.characteristic_.properties.indexOf(property) >= 0;

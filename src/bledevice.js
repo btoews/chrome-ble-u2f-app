@@ -9,7 +9,6 @@ function BleDevice(central, obj) {
   this.service_ = null;
 
   this.address = this.device_.address;
-  this.connectable_ = this.device_.connectable;
   this.connected_ = this.device_.connected;
   this.connecting_ = this.device_.connecting;
 
@@ -18,7 +17,7 @@ function BleDevice(central, obj) {
 
   chrome.bluetooth.onDeviceChanged.addListener(this.deviceChanged_.bind(this));
   chrome.bluetoothLowEnergy.onServiceAdded.addListener(this.serviceAdded_.bind(this));
-  chrome.bluetoothLowEnergy.onServiceChanged.addListener(this.serviceChanged_.bind(this));
+  chrome.bluetoothLowEnergy.onServiceChanged.addListener(this.serviceAdded_.bind(this));
   chrome.bluetoothLowEnergy.onServiceRemoved.addListener(this.serviceRemoved_.bind(this));
 }
 
@@ -36,7 +35,7 @@ BleDevice.prototype.withConnected = function() {
       if (self.connected_)
         return resolve();
 
-      if (!self.connecting_ && self.connectable_)
+      if (!self.connecting_)
         self.connect_();
 
       self.withConnected_.push(resolve);
@@ -46,14 +45,15 @@ BleDevice.prototype.withConnected = function() {
 
 // Connect to this device.
 BleDevice.prototype.connect_ = function() {
-    chrome.bluetoothLowEnergy.connect(this.address, function() {
-      if (chrome.runtime.lastError) {
-        var msg = chrome.runtime.lastError.message;
-        console.log("Error connecting to device: " + msg);
-      }
-    });
+  console.log("Connecting to device...");
+  chrome.bluetoothLowEnergy.connect(this.address, function() {
+    if (chrome.runtime.lastError) {
+      var msg = chrome.runtime.lastError.message;
+      console.log("Error connecting to device: " + msg);
+    }
+  });
 
-    this.connecting = true;
+  this.connecting = true;
 };
 
 // Handle event where device was changed.
@@ -61,12 +61,10 @@ BleDevice.prototype.deviceChanged_ = function(changed) {
   if (changed.address != this.device_.address)
     return;
 
-  this.connectable_ = changed.connectable;
   this.connected_ = changed.connected;
   this.connecting_ = changed.connecting;
 
   if (this.connected_) {
-    console.log("Connected to device", changed);
     for(var cb; cb = this.withConnected_.shift();) {
       cb();
     }
@@ -82,14 +80,18 @@ BleDevice.prototype.withService = function() {
       if (self.service_)
         return resolve(self.service_);
 
-      chrome.bluetoothLowEnergy.getServices(self.device_.address, function(services) {
-        // We *should* be able to use this list of services, but
-        // getCharacteristics will return an empty list unless we wait for
-        // the onServiceChanged event. This seems like a bug?
-      });
-
+      self.discoverService_();
       self.withService_.push(resolve);
     });
+  });
+};
+
+BleDevice.prototype.discoverService_ = function() {
+  console.log("Discovering service...");
+  chrome.bluetoothLowEnergy.getServices(this.device_.address, function(services) {
+    // We *should* be able to use this list of services, but
+    // getCharacteristics will return an empty list unless we wait for
+    // the onServiceChanged event. This seems like a bug?
   });
 };
 
@@ -106,22 +108,12 @@ BleDevice.prototype.isOurService_ = function(service) {
 
 // Handle event where service was added.
 BleDevice.prototype.serviceAdded_ = function(added) {
-  if (this.isOurService_(added)) {
+  if (!this.service_ && this.isOurService_(added)) {
     this.service_ = new BleService(this, added);
 
-    console.log("U2F service added", added);
     for(var cb; cb = this.withService_.shift();) {
       cb(this.service_);
     }
-  }
-};
-
-// Handle event where service was changed.
-BleDevice.prototype.serviceChanged_ = function(changed) {
-  if (this.service_) {
-    console.log("U2F service changed", changed);
-  } else {
-    this.serviceAdded_(changed);
   }
 };
 

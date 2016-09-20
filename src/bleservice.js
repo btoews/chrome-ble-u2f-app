@@ -29,6 +29,7 @@ BleService.prototype.discoverCharacteristics_ = function() {
   var self = this;
 
   return new Promise(function(resolve, reject) {
+    console.log("Discovering characteristics...");
     chrome.bluetoothLowEnergy.getCharacteristics(self.service_.instanceId, function(chars) {
       var charSet = new Object();
       chars.forEach(function(char) {

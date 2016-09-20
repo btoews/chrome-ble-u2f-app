@@ -7,4 +7,13 @@ chrome.app.runtime.onLaunched.addListener(function() {
       'left': 0
     }
   });
+
+  chrome.app.window.create('window.html', {
+    'outerBounds': {
+      'width': 800,
+      'height': 600,
+      'top': 0,
+      'left': 800
+    }
+  });
 });
