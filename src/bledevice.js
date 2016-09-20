@@ -3,17 +3,17 @@
  */
 'use strict';
 
-function BleDevice(central, obj) {
-  this.central_ = central;
+function BleDevice(obj) {
+  // public
+  this.service = null;
+  this.connected = obj.connected;
+  this.address = obj.address;
+
+  // private
   this.device_ = obj;
-  this.service_ = null;
-
-  this.address = this.device_.address;
-  this.connected_ = this.device_.connected;
-  this.connecting_ = this.device_.connecting;
-
-  this.withConnected_ = [];
-  this.withService_ = [];
+  this.connecting_ = obj.connecting;
+  this.whenConnected_ = [];
+  this.whenServiceDiscovered_ = [];
 
   chrome.bluetooth.onDeviceChanged.addListener(this.deviceChanged_.bind(this));
   chrome.bluetoothLowEnergy.onServiceAdded.addListener(this.serviceAdded_.bind(this));
@@ -27,19 +27,17 @@ BleDevice.prototype.hasService = function() {
 };
 
 // Returns promise that is resolved when we are connected to this device.
-BleDevice.prototype.withConnected = function() {
+BleDevice.prototype.connect = function() {
   var self = this;
 
-  return self.central_.withAdapterPoweredOn().then(function() {
-    return new Promise(function(resolve, reject) {
-      if (self.connected_)
-        return resolve();
+  return new Promise(function(resolve, reject) {
+    if (self.connected)
+      return resolve(self);
 
-      if (!self.connecting_)
-        self.connect_();
+    if (!self.connecting_)
+      self.connect_();
 
-      self.withConnected_.push(resolve);
-    });
+    self.whenConnected_.push(resolve);
   });
 };
 
@@ -58,31 +56,32 @@ BleDevice.prototype.connect_ = function() {
 
 // Handle event where device was changed.
 BleDevice.prototype.deviceChanged_ = function(changed) {
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
+
   if (changed.address != this.device_.address)
     return;
 
-  this.connected_ = changed.connected;
+  this.connected = changed.connected;
   this.connecting_ = changed.connecting;
 
-  if (this.connected_) {
-    for(var cb; cb = this.withConnected_.shift();) {
-      cb();
+  if (this.connected) {
+    for(var cb; cb = this.whenConnected_.shift();) {
+      cb(this);
     }
   }
 };
 
 // Returns promise that is resolved when we've got the service for this device.
-BleDevice.prototype.withService = function() {
+BleDevice.prototype.discoverService = function() {
   var self = this;
 
-  return self.withConnected().then(function() {
-    return new Promise(function(resolve, reject) {
-      if (self.service_)
-        return resolve(self.service_);
+  return new Promise(function(resolve, reject) {
+    if (self.service)
+      return resolve(self.service);
 
-      self.discoverService_();
-      self.withService_.push(resolve);
-    });
+    self.discoverService_();
+    self.whenServiceDiscovered_.push(resolve);
   });
 };
 
@@ -97,30 +96,34 @@ BleDevice.prototype.discoverService_ = function() {
 
 // Is this the U2F service from this device?
 BleDevice.prototype.isOurService_ = function(service) {
-  if (service.deviceAddress != this.device_.address)
-    return false;
-
-  if (service.uuid != BleService.UUID)
-    return false;
-
-  return true;
+  if (service.deviceAddress == this.device_.address) {
+    if (service.uuid == BleService.UUID)
+      return true
+  }
+  return false;
 };
 
 // Handle event where service was added.
 BleDevice.prototype.serviceAdded_ = function(added) {
-  if (!this.service_ && this.isOurService_(added)) {
-    this.service_ = new BleService(this, added);
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
 
-    for(var cb; cb = this.withService_.shift();) {
-      cb(this.service_);
+  if (!this.service && this.isOurService_(added)) {
+    this.service = new BleService(added);
+
+    for(var cb; cb = this.whenServiceDiscovered_.shift();) {
+      cb(this.service);
     }
   }
 };
 
 // Handle event where service was removed.
 BleDevice.prototype.serviceRemoved_ = function(removed) {
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
+
   if (this.isOurService_(removed)) {
     console.log("U2F service removed", removed)
-    this.service_ = null;
+    this.service = null;
   }
 };

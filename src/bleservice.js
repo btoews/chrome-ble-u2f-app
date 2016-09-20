@@ -3,25 +3,25 @@
  */
 'use strict';
 
-function BleService(device, obj) {
-  this.device_ = device;
+function BleService(obj) {
+  // public
+  this.characteristics = null;
+
+  // private
   this.service_ = obj;
-  this.characteristics_ = null;
 }
 
 BleService.UUID = "0000fffd-0000-1000-8000-00805f9b34fb";
 
-BleService.prototype.withCharacteristics = function() {
+BleService.prototype.discoverCharacteristics = function() {
   var self = this;
 
-  return self.device_.withService().then(function() {
-    if (self.characteristics_)
-      return Promise.resolve(self.characteristics_);
+  if (self.characteristics)
+    return Promise.resolve(self.characteristics);
 
-    return self.discoverCharacteristics_().then(function(charSet) {
-      self.validateCharacteristics_(charSet);
-      return self.characteristics_ = charSet;
-    });
+  return self.discoverCharacteristics_().then(function(charSet) {
+    self.validateCharacteristics_(charSet);
+    return self.characteristics = charSet;
   });
 };
 
@@ -31,6 +31,9 @@ BleService.prototype.discoverCharacteristics_ = function() {
   return new Promise(function(resolve, reject) {
     console.log("Discovering characteristics...");
     chrome.bluetoothLowEnergy.getCharacteristics(self.service_.instanceId, function(chars) {
+      if (chrome.runtime.lastError)
+        throw chrome.runtime.lastError;
+
       var charSet = new Object();
       chars.forEach(function(char) {
         self.addCharacteristic_(charSet, char);
@@ -61,18 +64,18 @@ BleService.prototype.addCharacteristic_ = function(charSet, char) {
 
 BleService.prototype.validateCharacteristics_ = function(charSet) {
   if (!charSet.controlPoint) {
-    throw "no control point characteristic";
+    throw new Error("no control point characteristic");
   }
 
   if (!charSet.status) {
-    throw "no status characteristic";
+    throw new Error("no status characteristic");
   }
 
   if (!charSet.controlPointLength) {
-    throw "no control point length characteristic";
+    throw new Error("no control point length characteristic");
   }
 
   if (!charSet.serviceRevision) {
-    throw "no service revision characteristic";
+    throw new Error("no service revision characteristic");
   }
 }

@@ -4,15 +4,17 @@
 'use strict';
 
 function BleCentral() {
-  this.powered_ = null;
+  // public
+  this.device = null;
+  this.powered = null;
+
+  // private
   this.discovering_ = null;
-  this.device_ = null;
+  this.whenAdapterPoweredOn_ = [];
+  this.whenDeviceDiscovered_ = [];
 
-  this.withAdapterPoweredOn_ = [];
-  this.withDevice_ = [];
-
-  chrome.bluetooth.getAdapterState(this.adapterStateChanged.bind(this));
-  chrome.bluetooth.onAdapterStateChanged.addListener(this.adapterStateChanged.bind(this));
+  chrome.bluetooth.getAdapterState(this.adapterStateChanged_.bind(this));
+  chrome.bluetooth.onAdapterStateChanged.addListener(this.adapterStateChanged_.bind(this));
 
   chrome.bluetooth.onDeviceAdded.addListener(this.deviceAdded_.bind(this));
   chrome.bluetooth.onDeviceChanged.addListener(this.deviceAdded_.bind(this));
@@ -23,127 +25,89 @@ BleCentral.prototype.withAdapterPoweredOn = function() {
   var self = this;
 
   return new Promise(function(resolve, reject) {
-    if (self.powered_) {
-      resolve();
+    if (self.powered) {
+      resolve(self);
     } else {
-      self.withAdapterPoweredOn_.push(resolve);
+      self.whenAdapterPoweredOn_.push(resolve);
     }
   });
 };
 
-BleCentral.prototype.adapterStateChanged = function(adapter) {
-  this.powered_ = adapter.powered;
+BleCentral.prototype.adapterStateChanged_ = function(adapter) {
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
+
+  this.powered = adapter.powered;
   this.discovering_ = adapter.discovering;
 
-  if (this.powered_) {
-    for(var cb; cb = this.withAdapterPoweredOn_.shift();) {
-      cb();
+  if (this.powered) {
+    for(var cb; cb = this.whenAdapterPoweredOn_.shift();) {
+      cb(this);
     }
   }
 };
 
-BleCentral.prototype.withDevice = function() {
+BleCentral.prototype.discoverDevice = function() {
   var self = this;
 
-  return self.withAdapterPoweredOn().then(function() {
-    return new Promise(function(resolve, reject) {
-      if (self.device_) {
-        resolve(self.device_);
-      } else {
-        self.withDevice_.push(resolve);
-        self.startDiscovery();
-      }
-    });
+  return new Promise(function(resolve, reject) {
+    if (self.device) {
+      resolve(self.device);
+    } else {
+      self.whenDeviceDiscovered_.push(resolve);
+      self.startDiscovery();
+    }
   });
 };
 
 BleCentral.prototype.isOurDevice_ = function(other) {
-  return this.device_ && this.device_.address == other.address;
-}
+  return this.device && this.device.address == other.address;
+};
 
 BleCentral.prototype.deviceAdded_ = function(added) {
-  if (this.isOurDevice_(added)) {
-    return;
-  }
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
 
-  var device = new BleDevice(this, added);
+  if (this.isOurDevice_(added))
+    return;
+
+  var device = new BleDevice(added);
   if (device.hasService()) {
     console.log("Device added", device, added);
     this.stopDiscovery();
-    this.device_ = device;
-    for(var cb; cb = this.withDevice_.shift();) {
+    this.device = device;
+    for(var cb; cb = this.whenDeviceDiscovered_.shift();) {
       cb(device);
     }
   }
-}
+};
 
 BleCentral.prototype.deviceRemoved_ = function(removed) {
+  if (chrome.runtime.lastError)
+    throw chrome.runtime.lastError;
+
   if (this.isOurDevice_(removed)) {
-    console.log("Device removed", removed, this.device_);
-    this.startDiscovery();
-    this.device_ = null;
+    console.log("Device removed", removed, this.device);
+    this.device = null;
   }
-}
+};
 
 BleCentral.prototype.startDiscovery = function() {
-  if (!this.discovering_) {
-    chrome.bluetooth.startDiscovery();
-  }
-}
+  if (this.discovering_)
+    return;
+
+  chrome.bluetooth.startDiscovery(function() {
+    if (chrome.runtime.lastError)
+      throw chrome.runtime.lastError;
+  });
+};
 
 BleCentral.prototype.stopDiscovery = function() {
-  if (this.discovering_) {
-    chrome.bluetooth.stopDiscovery();
-  }
-}
+  if (!this.discovering_)
+    return;
 
-
-
-
-
-
-
-
-
-
-
-
-
-// chrome.bluetooth.onAdapterStateChanged.addListener(function(state) {
-//   console.log("adapter state changed: ", state);
-// });
-//
-// chrome.bluetooth.onDeviceAdded.addListener(function(device) {
-//   if (device.address == "67:71:BF:B1:ED:C5")
-//     console.log("device added: ", device);
-// });
-//
-// chrome.bluetooth.onDeviceChanged.addListener(function(device) {
-//   if (device.address == "67:71:BF:B1:ED:C5")
-//     console.log("device changed: ", device);
-// });
-//
-// chrome.bluetooth.onDeviceRemoved.addListener(function(device) {
-//   if (device.address == "67:71:BF:B1:ED:C5")
-//     console.log("device removed: ", device);
-// });
-//
-// chrome.bluetoothLowEnergy.onServiceAdded.addListener(function(service){
-//   console.log("service added: ", service);
-// });
-//
-// chrome.bluetoothLowEnergy.onServiceChanged.addListener(function(service){
-//   console.log("service changed: ", service);
-// });
-//
-// chrome.bluetoothLowEnergy.onServiceRemoved.addListener(function(service){
-//   console.log("service removed: ", service);
-// });
-//
-// chrome.bluetoothLowEnergy.onCharacteristicValueChanged.addListener(function(characteristic){
-//   console.log("characteristic value changed: ", characteristic);
-// });
-//
-// chrome.bluetoothLowEnergy.onDescriptorValueChanged.addListener(function(descriptor){
-//   console.log("descriptor value changed: ", descriptor);
-// });
+  chrome.bluetooth.stopDiscovery(function() {
+    if (chrome.runtime.lastError)
+      throw chrome.runtime.lastError;
+  });
+};
