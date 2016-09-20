@@ -1,0 +1,21 @@
+{
+  "name": "BLE U2F Client",
+  "description": "Communicate with BLE U2F authenticators",
+  "version": "0.1",
+  "manifest_version": 2,
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "bluetooth": {
+    "uuids": [
+      "FFFD",                                 // U2F service
+      "F1D0FFF1-DEAA-ECEE-B42F-C9BA7ED623BB", // Control point characteristic
+      "F1D0FFF2-DEAA-ECEE-B42F-C9BA7ED623BB", // Status characteristic
+      "F1D0FFF3-DEAA-ECEE-B42F-C9BA7ED623BB", // Control point length characteristic
+      "2A28"                                  // Service revision characteristic
+    ],
+    "low_energy": true
+  }
+}
