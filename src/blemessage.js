@@ -17,3 +17,8 @@ BleMessage.CmdOrStatus = {
   msg:       0x83,
   error:     0xbf
 };
+
+// Get a BleMessageIterator for this message.
+BleMessage.prototype.iterator = function(maxLen) {
+  return new BleMessageIterator(this, maxLen);
+};

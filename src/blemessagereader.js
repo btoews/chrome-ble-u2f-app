@@ -30,14 +30,10 @@ BleMessageReader.prototype.isInitialFragment_ = function(fragment) {
   var isCmdOrStatus = firstByte.getUint8(0) >= 0b10000000;
 
   // Have this object's properties already been initialized?
-  var wasInitialized = [
-    this.cmdOrStatus,
-    this.data,
-    this.writePtr_
-  ].indexOf(null) < 0;
+  var notInitialized = this.data == null;
 
-  if (isCmdOrStatus ^ wasInitialized)
-    throw "invalid BLE message fragment";
+  if (isCmdOrStatus ^ notInitialized)
+    throw new Error("invalid BLE message fragment");
 
   return isCmdOrStatus;
 };
@@ -50,7 +46,7 @@ BleMessageReader.prototype.readInitialFragment_ = function(fragment) {
   var totalLength = header.getUint16(1, false);
 
   this.data = new ArrayBuffer(totalLength);
-  this.writePtr_ = Uint8Array(this.data, 0);
+  this.writePtr_ = new Uint8Array(this.data, 0);
 
   this.readData_(fragment.slice(BleMessage.HeaderSize));
 };
@@ -61,7 +57,7 @@ BleMessageReader.prototype.readContinuationFragment_ = function(fragment) {
   var seq = header.getUint8(0);
 
   if (seq != ++this.lastSeq)
-    throw "invalid BLE sequence number";
+    throw new Error("invalid BLE sequence number");
 
   this.readData_(fragment.slice(BleMessage.SequenceSize));
 };
